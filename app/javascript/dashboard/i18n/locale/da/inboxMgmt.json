@@ -165,7 +165,9 @@
       },
       "AGENTS": {
         "TITLE": "Agenter",
-        "DESC": "Her kan du tilføje agenter til at håndtere din nyoprettede indbakke. Kun disse valgte agenter vil have adgang til din indbakke. Agenter som ikke er en del af denne indbakke, vil ikke kunne se eller reagere på beskeder i denne indbakke, når de logger ind. <br> <b>PS:</b> Som administrator, hvis du har brug for adgang til alle indbakker, bør du tilføje dig selv som agent til alle indbakker, du opretter."
+        "DESC": "Her kan du tilføje agenter til at håndtere din nyoprettede indbakke. Kun disse valgte agenter vil have adgang til din indbakke. Agenter som ikke er en del af denne indbakke, vil ikke kunne se eller reagere på beskeder i denne indbakke, når de logger ind. <br> <b>PS:</b> Som administrator, hvis du har brug for adgang til alle indbakker, bør du tilføje dig selv som agent til alle indbakker, du opretter.",
+        "VALIDATION_ERROR": "Add atleast one agent to your new Inbox",
+        "PICK_AGENTS": "Pick agents for the inbox"
       },
       "DETAILS": {
         "TITLE": "Indbakke Detaljer",
@@ -239,7 +241,9 @@
       "AUTO_ASSIGNMENT": "Aktiver automatisk tildeling",
       "INBOX_UPDATE_TITLE": "Indbakke Indstillinger",
       "INBOX_UPDATE_SUB_TEXT": "Opdater dine indbakkeindstillinger",
-      "AUTO_ASSIGNMENT_SUB_TEXT": "Aktiver eller deaktiver automatisk tildeling af nye samtaler til agenter tilføjet til denne indbakke."
+      "AUTO_ASSIGNMENT_SUB_TEXT": "Aktiver eller deaktiver automatisk tildeling af nye samtaler til agenter tilføjet til denne indbakke.",
+      "HMAC_VERIFICATION": "User Identity Validation",
+      "HMAC_DESCRIPTION": "Inorder validate the users identity, the SDK allows you to pass an `identity_hash` for each user. You can generate HMAC using 'sha256' with the key shown here."
     },
     "FACEBOOK_REAUTHORIZE": {
       "TITLE": "Genautorisér",

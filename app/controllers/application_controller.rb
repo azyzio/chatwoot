@@ -1,11 +1,12 @@
 class ApplicationController < ActionController::Base
   include DeviseTokenAuth::Concerns::SetUserByToken
   include Pundit
+  include SwitchLocale
 
   protect_from_forgery with: :null_session
 
   before_action :set_current_user, unless: :devise_controller?
-  include SwitchLocale
+  around_action :switch_locale
   around_action :handle_with_exception, unless: :devise_controller?
 
   # after_action :verify_authorized
@@ -22,7 +23,7 @@ class ApplicationController < ActionController::Base
     render_unauthorized('You are not authorized to do this action')
   ensure
     # to address the thread variable leak issues in Puma/Thin webserver
-    Current.user = nil
+    Current.reset
   end
 
   def set_current_user

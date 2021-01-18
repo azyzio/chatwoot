@@ -165,7 +165,9 @@
       },
       "AGENTS": {
         "TITLE": "Agenten",
-        "DESC": "Hier kunt u agenten toevoegen om uw nieuw gecreëerde inbox te beheren. Alleen deze agenten hebben toegang tot uw inbox. Agents die geen deel uitmaken van dit postvak in zullen niet in staat zijn om berichten in dit postvak te zien of te reageren wanneer ze inloggen. <br> <b>PS:</b> Als beheerder als u toegang wilt krijgen tot alle inboxen, voeg jezelf toe als agent aan alle inboxen die je maakt."
+        "DESC": "Hier kunt u agenten toevoegen om uw nieuw gecreëerde inbox te beheren. Alleen deze agenten hebben toegang tot uw inbox. Agents die geen deel uitmaken van dit postvak in zullen niet in staat zijn om berichten in dit postvak te zien of te reageren wanneer ze inloggen. <br> <b>PS:</b> Als beheerder als u toegang wilt krijgen tot alle inboxen, voeg jezelf toe als agent aan alle inboxen die je maakt.",
+        "VALIDATION_ERROR": "Add atleast one agent to your new Inbox",
+        "PICK_AGENTS": "Pick agents for the inbox"
       },
       "DETAILS": {
         "TITLE": "Details inbox",
@@ -239,7 +241,9 @@
       "AUTO_ASSIGNMENT": "Automatische toewijzing inschakelen",
       "INBOX_UPDATE_TITLE": "Instellingen Postvak In",
       "INBOX_UPDATE_SUB_TEXT": "Update uw inbox instellingen",
-      "AUTO_ASSIGNMENT_SUB_TEXT": "In- of uitschakelen van de automatische toewijzing van nieuwe gesprekken aan de agenten die aan deze inbox zijn toegevoegd."
+      "AUTO_ASSIGNMENT_SUB_TEXT": "In- of uitschakelen van de automatische toewijzing van nieuwe gesprekken aan de agenten die aan deze inbox zijn toegevoegd.",
+      "HMAC_VERIFICATION": "User Identity Validation",
+      "HMAC_DESCRIPTION": "Inorder validate the users identity, the SDK allows you to pass an `identity_hash` for each user. You can generate HMAC using 'sha256' with the key shown here."
     },
     "FACEBOOK_REAUTHORIZE": {
       "TITLE": "Autoriseer",
