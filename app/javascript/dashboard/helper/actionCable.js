@@ -1,5 +1,6 @@
 import AuthAPI from '../api/auth';
 import BaseActionCableConnector from '../../shared/helpers/BaseActionCableConnector';
+import { newMessageNotification } from 'shared/helpers/AudioNotificationHelper';
 
 class ActionCableConnector extends BaseActionCableConnector {
   constructor(app, pubsubToken) {
@@ -47,10 +48,9 @@ class ActionCableConnector extends BaseActionCableConnector {
   };
 
   onAssigneeChanged = payload => {
-    const { meta = {}, id } = payload;
-    const { assignee } = meta || {};
+    const { id } = payload;
     if (id) {
-      this.app.$store.dispatch('updateAssignee', { id, assignee });
+      this.app.$store.dispatch('updateConversation', payload);
     }
     this.fetchConversationStats();
   };
@@ -63,6 +63,7 @@ class ActionCableConnector extends BaseActionCableConnector {
   onLogout = () => AuthAPI.logout();
 
   onMessageCreated = data => {
+    newMessageNotification(data);
     this.app.$store.dispatch('addMessage', data);
   };
 

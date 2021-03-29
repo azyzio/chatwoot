@@ -107,11 +107,23 @@ export default {
         this.contentAttributes,
         this.$t('CONVERSATION.NO_RESPONSE')
       );
-      let messageContent =
-        this.formatMessage(this.data.content, this.isATweet) +
-        botMessageContent;
 
-      return messageContent;
+      const {
+        email: { html_content: { full: fullHTMLContent } = {} } = {},
+      } = this.contentAttributes;
+
+      if (fullHTMLContent && this.isIncoming) {
+        let parsedContent = new DOMParser().parseFromString(
+          fullHTMLContent || '',
+          'text/html'
+        );
+        if (!parsedContent.getElementsByTagName('parsererror').length) {
+          return parsedContent.body.innerHTML;
+        }
+      }
+      return (
+        this.formatMessage(this.data.content, this.isATweet) + botMessageContent
+      );
     },
     contentAttributes() {
       return this.data.content_attributes || {};
@@ -207,6 +219,30 @@ export default {
     &.is-image.is-text > .message-text__wrap {
       max-width: 32rem;
       padding: var(--space-small) var(--space-normal);
+    }
+
+    &.is-private .file.message-text__wrap {
+      .ion-document-text {
+        color: var(--w-400);
+      }
+      .text-block-title {
+        color: #3c4858;
+      }
+      .download.button {
+        color: var(--w-400);
+      }
+    }
+
+    &.is-private.is-text > .message-text__wrap .link {
+      color: var(--w-700);
+    }
+    &.is-private.is-text > .message-text__wrap .prosemirror-mention-node {
+      font-weight: var(--font-weight-black);
+      background: none;
+      border-radius: var(--border-radius-small);
+      padding: 0;
+      color: var(--color-body);
+      text-decoration: underline;
     }
   }
 
