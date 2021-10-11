@@ -9,17 +9,19 @@ class SupportMailbox < ApplicationMailbox
                     :decorate_mail
 
   def process
-    find_or_create_contact
-    create_conversation
-    create_message
-    add_attachments_to_message
+    ActiveRecord::Base.transaction do
+      find_or_create_contact
+      create_conversation
+      create_message
+      add_attachments_to_message
+    end
   end
 
   private
 
   def find_channel
     mail.to.each do |email|
-      @channel = Channel::Email.find_by(email: email)
+      @channel = Channel::Email.find_by('lower(email) = ? OR lower(forward_to_email) = ?', email.downcase, email.downcase)
       break if @channel.present?
     end
     raise 'Email channel/inbox not found' if @channel.nil?
@@ -47,6 +49,7 @@ class SupportMailbox < ApplicationMailbox
                                              contact_inbox_id: @contact_inbox.id,
                                              additional_attributes: {
                                                source: 'email',
+                                               mail_subject: @processed_mail.subject,
                                                initiated_at: {
                                                  timestamp: Time.now.utc
                                                }
@@ -55,7 +58,7 @@ class SupportMailbox < ApplicationMailbox
   end
 
   def find_or_create_contact
-    @contact = @inbox.contacts.find_by(email: processed_mail.from.first)
+    @contact = @inbox.contacts.find_by(email: @processed_mail.original_sender)
     if @contact.present?
       @contact_inbox = ContactInbox.find_by(inbox: @inbox, contact: @contact)
     else
@@ -69,7 +72,7 @@ class SupportMailbox < ApplicationMailbox
       inbox: @inbox,
       contact_attributes: {
         name: identify_contact_name,
-        email: processed_mail.from.first,
+        email: @processed_mail.original_sender,
         additional_attributes: {
           source_id: "email:#{processed_mail.message_id}"
         }
@@ -79,6 +82,6 @@ class SupportMailbox < ApplicationMailbox
   end
 
   def identify_contact_name
-    processed_mail.from.first.split('@').first
+    processed_mail.sender_name || processed_mail.from.first.split('@').first
   end
 end

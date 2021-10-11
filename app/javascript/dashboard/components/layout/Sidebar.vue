@@ -14,14 +14,26 @@
           :menu-item="item"
         />
         <sidebar-item
-          v-if="shouldShowInboxes"
+          v-if="shouldShowTeams"
+          :key="teamSection.toState"
+          :menu-item="teamSection"
+        />
+        <sidebar-item
+          v-if="shouldShowSidebarItem"
           :key="inboxSection.toState"
           :menu-item="inboxSection"
         />
         <sidebar-item
-          v-if="shouldShowInboxes"
+          v-if="shouldShowSidebarItem"
           :key="labelSection.toState"
           :menu-item="labelSection"
+          @add-label="showAddLabelPopup"
+        />
+        <sidebar-item
+          v-if="showShowContactSideMenu"
+          :key="contactLabelSection.key"
+          :menu-item="contactLabelSection"
+          @add-label="showAddLabelPopup"
         />
       </transition-group>
     </div>
@@ -30,173 +42,92 @@
       <availability-status />
     </div>
 
-    <div class="bottom-nav app-context-menu">
-      <transition name="menu-slide">
-        <div
-          v-if="showOptionsMenu"
-          v-on-clickaway="showOptions"
-          class="dropdown-pane top"
-        >
-          <ul class="vertical dropdown menu">
-            <li v-if="showChangeAccountOption">
-              <button
-                class="button clear change-accounts--button"
-                @click="changeAccount"
-              >
-                {{ $t('SIDEBAR_ITEMS.CHANGE_ACCOUNTS') }}
-              </button>
-            </li>
-            <li>
-              <router-link :to="`/app/accounts/${accountId}/profile/settings`">
-                {{ $t('SIDEBAR_ITEMS.PROFILE_SETTINGS') }}
-              </router-link>
-            </li>
-            <li>
-              <a href="#" @click.prevent="logout()">
-                {{ $t('SIDEBAR_ITEMS.LOGOUT') }}
-              </a>
-            </li>
-          </ul>
-        </div>
-      </transition>
-
-      <div class="current-user" @click.prevent="showOptions()">
-        <thumbnail
-          :src="currentUser.avatar_url"
-          :username="currentUserAvailableName"
-        />
-        <div class="current-user--data">
-          <h3 class="current-user--name">
-            {{ currentUserAvailableName }}
-          </h3>
-          <h5 v-if="currentRole" class="current-user--role">
-            {{ $t(`AGENT_MGMT.AGENT_TYPES.${currentRole.toUpperCase()}`) }}
-          </h5>
-        </div>
-        <span class="current-user--options icon ion-android-more-vertical" />
-      </div>
-    </div>
-    <woot-modal
-      :show="showAccountModal"
-      :on-close="onClose"
-      class="account-selector--modal"
-    >
-      <woot-modal-header
-        :header-title="$t('SIDEBAR_ITEMS.CHANGE_ACCOUNTS')"
-        :header-content="$t('SIDEBAR_ITEMS.SELECTOR_SUBTITLE')"
+    <div class="bottom-nav app-context-menu" @click="toggleOptions">
+      <agent-details @show-options="toggleOptions" />
+      <notification-bell />
+      <span class="current-user--options icon ion-android-more-vertical" />
+      <options-menu
+        :show="showOptionsMenu"
+        @toggle-accounts="toggleAccountModal"
+        @show-support-chat-window="toggleSupportChatWindow"
+        @key-shortcut-modal="toggleKeyShortcutModal"
+        @close="toggleOptions"
       />
-      <div
-        v-for="account in currentUser.accounts"
-        :key="account.id"
-        class="account-selector"
-      >
-        <a :href="`/app/accounts/${account.id}/dashboard`">
-          <i v-if="account.id === accountId" class="ion ion-ios-checkmark" />
-          <label :for="account.name" class="account--details">
-            <div class="account--name">{{ account.name }}</div>
-            <div class="account--role">{{ account.role }}</div>
-          </label>
-        </a>
-      </div>
-      <div
-        v-if="globalConfig.createNewAccountFromDashboard"
-        class="modal-footer delete-item"
-      >
-        <button
-          class="button success large expanded nice"
-          @click="createAccount"
-        >
-          {{ $t('CREATE_ACCOUNT.NEW_ACCOUNT') }}
-        </button>
-      </div>
-    </woot-modal>
+    </div>
 
-    <woot-modal
+    <woot-key-shortcut-modal
+      v-if="showShortcutModal"
+      @close="closeKeyShortcutModal"
+      @clickaway="closeKeyShortcutModal"
+    />
+
+    <account-selector
+      :show-account-modal="showAccountModal"
+      @close-account-modal="toggleAccountModal"
+      @show-create-account-modal="openCreateAccountModal"
+    />
+
+    <add-account-modal
       :show="showCreateAccountModal"
-      :on-close="onCloseCreate"
-      class="account-selector--modal"
-    >
-      <div class="column content-box">
-        <woot-modal-header
-          :header-title="$t('CREATE_ACCOUNT.NEW_ACCOUNT')"
-          :header-content="$t('CREATE_ACCOUNT.SELECTOR_SUBTITLE')"
-        />
+      @close-account-create-modal="closeCreateAccountModal"
+    />
 
-        <form class="row" @submit.prevent="addAccount()">
-          <div class="medium-12 columns">
-            <label :class="{ error: $v.accountName.$error }">
-              {{ $t('CREATE_ACCOUNT.FORM.NAME.LABEL') }}
-              <input
-                v-model.trim="accountName"
-                type="text"
-                :placeholder="$t('CREATE_ACCOUNT.FORM.NAME.PLACEHOLDER')"
-                @input="$v.accountName.$touch"
-              />
-            </label>
-          </div>
-          <div class="modal-footer  medium-12 columns">
-            <div class="medium-12 columns">
-              <woot-submit-button
-                :disabled="
-                  $v.accountName.$invalid ||
-                    $v.accountName.$invalid ||
-                    uiFlags.isCreating
-                "
-                :button-text="$t('CREATE_ACCOUNT.FORM.SUBMIT')"
-                :loading="uiFlags.isCreating"
-                button-class="large expanded"
-              />
-            </div>
-          </div>
-        </form>
-      </div>
+    <woot-modal :show.sync="showAddLabelModal" :on-close="hideAddLabelPopup">
+      <add-label-modal @close="hideAddLabelPopup" />
     </woot-modal>
   </aside>
 </template>
 
 <script>
 import { mapGetters } from 'vuex';
-import { mixin as clickaway } from 'vue-clickaway';
 
 import adminMixin from '../../mixins/isAdmin';
-import Auth from '../../api/auth';
 import SidebarItem from './SidebarItem';
 import AvailabilityStatus from './AvailabilityStatus';
 import { frontendURL } from '../../helper/URLHelper';
-import Thumbnail from '../widgets/Thumbnail';
 import { getSidebarItems } from '../../i18n/default-sidebar';
-import { required, minLength } from 'vuelidate/lib/validators';
 import alertMixin from 'shared/mixins/alertMixin';
+import NotificationBell from './sidebarComponents/NotificationBell';
+import AgentDetails from './sidebarComponents/AgentDetails.vue';
+import OptionsMenu from './sidebarComponents/OptionsMenu.vue';
+import AccountSelector from './sidebarComponents/AccountSelector.vue';
+import AddAccountModal from './sidebarComponents/AddAccountModal.vue';
+import AddLabelModal from '../../routes/dashboard/settings/labels/AddLabel';
+import WootKeyShortcutModal from 'components/widgets/modal/WootKeyShortcutModal';
+import {
+  hasPressedAltAndCKey,
+  hasPressedAltAndRKey,
+  hasPressedAltAndSKey,
+  hasPressedAltAndVKey,
+  hasPressedCommandAndForwardSlash,
+  isEscape,
+} from 'shared/helpers/KeyboardHelpers';
+import eventListenerMixins from 'shared/mixins/eventListenerMixins';
+import router from '../../routes';
 
 export default {
   components: {
+    AgentDetails,
     SidebarItem,
-    Thumbnail,
     AvailabilityStatus,
+    NotificationBell,
+    OptionsMenu,
+    AccountSelector,
+    AddAccountModal,
+    AddLabelModal,
+    WootKeyShortcutModal,
   },
-  mixins: [clickaway, adminMixin, alertMixin],
-  props: {
-    route: {
-      type: String,
-      default: '',
-    },
-  },
+  mixins: [adminMixin, alertMixin, eventListenerMixins],
   data() {
     return {
       showOptionsMenu: false,
       showAccountModal: false,
       showCreateAccountModal: false,
-      accountName: '',
-      vertical: 'bottom',
-      horizontal: 'center',
+      showAddLabelModal: false,
+      showShortcutModal: false,
     };
   },
-  validations: {
-    accountName: {
-      required,
-      minLength: minLength(1),
-    },
-  },
+
   computed: {
     ...mapGetters({
       currentUser: 'getCurrentUser',
@@ -204,18 +135,10 @@ export default {
       inboxes: 'inboxes/getInboxes',
       accountId: 'getCurrentAccountId',
       currentRole: 'getCurrentRole',
-      uiFlags: 'agents/getUIFlags',
       accountLabels: 'labels/getLabelsOnSidebar',
+      teams: 'teams/getMyTeams',
     }),
-    currentUserAvailableName() {
-      return this.currentUser.name;
-    },
-    showChangeAccountOption() {
-      if (this.globalConfig.createNewAccountFromDashboard) {
-        return true;
-      }
-      return this.currentUser.accounts.length > 1;
-    },
+
     sidemenuItems() {
       return getSidebarItems(this.accountId);
     },
@@ -239,8 +162,14 @@ export default {
     currentRoute() {
       return this.$store.state.route.name;
     },
-    shouldShowInboxes() {
+    shouldShowSidebarItem() {
       return this.sidemenuItems.common.routes.includes(this.currentRoute);
+    },
+    showShowContactSideMenu() {
+      return this.sidemenuItems.contacts.routes.includes(this.currentRoute);
+    },
+    shouldShowTeams() {
+      return this.shouldShowSidebarItem && this.teams.length;
     },
     inboxSection() {
       return {
@@ -252,6 +181,7 @@ export default {
         cssClass: 'menu-title align-justify',
         toState: frontendURL(`accounts/${this.accountId}/settings/inboxes`),
         toStateName: 'settings_inbox_list',
+        newLinkRouteName: 'settings_inbox_new',
         children: this.inboxes.map(inbox => ({
           id: inbox.id,
           label: inbox.name,
@@ -266,10 +196,13 @@ export default {
         icon: 'ion-pound',
         label: 'LABELS',
         hasSubMenu: true,
+        newLink: true,
         key: 'label',
         cssClass: 'menu-title align-justify',
         toState: frontendURL(`accounts/${this.accountId}/settings/labels`),
         toStateName: 'labels_list',
+        showModalForNewItem: true,
+        modalName: 'AddLabel',
         children: this.accountLabels.map(label => ({
           id: label.id,
           label: label.title,
@@ -281,6 +214,48 @@ export default {
         })),
       };
     },
+    contactLabelSection() {
+      return {
+        icon: 'ion-pound',
+        label: 'TAGGED_WITH',
+        hasSubMenu: true,
+        key: 'label',
+        newLink: false,
+        cssClass: 'menu-title align-justify',
+        toState: frontendURL(`accounts/${this.accountId}/settings/labels`),
+        toStateName: 'labels_list',
+        showModalForNewItem: true,
+        modalName: 'AddLabel',
+        children: this.accountLabels.map(label => ({
+          id: label.id,
+          label: label.title,
+          color: label.color,
+          truncateLabel: true,
+          toState: frontendURL(
+            `accounts/${this.accountId}/labels/${label.title}/contacts`
+          ),
+        })),
+      };
+    },
+    teamSection() {
+      return {
+        icon: 'ion-ios-people',
+        label: 'TEAMS',
+        hasSubMenu: true,
+        newLink: true,
+        key: 'team',
+        cssClass: 'menu-title align-justify teams-sidebar-menu',
+        toState: frontendURL(`accounts/${this.accountId}/settings/teams`),
+        toStateName: 'teams_list',
+        newLinkRouteName: 'settings_teams_new',
+        children: this.teams.map(team => ({
+          id: team.id,
+          label: team.name,
+          truncateLabel: true,
+          toState: frontendURL(`accounts/${this.accountId}/team/${team.id}`),
+        })),
+      };
+    },
     dashboardPath() {
       return frontendURL(`accounts/${this.accountId}/dashboard`);
     },
@@ -288,8 +263,49 @@ export default {
   mounted() {
     this.$store.dispatch('labels/get');
     this.$store.dispatch('inboxes/get');
+    this.$store.dispatch('notifications/unReadCount');
+    this.$store.dispatch('teams/get');
   },
+
   methods: {
+    toggleKeyShortcutModal() {
+      this.showShortcutModal = true;
+    },
+    closeKeyShortcutModal() {
+      this.showShortcutModal = false;
+    },
+    handleKeyEvents(e) {
+      if (hasPressedCommandAndForwardSlash(e)) {
+        this.toggleKeyShortcutModal();
+      }
+      if (isEscape(e)) {
+        this.closeKeyShortcutModal();
+      }
+
+      if (hasPressedAltAndCKey(e)) {
+        if (!this.isCurrentRouteSameAsNavigation('home')) {
+          router.push({ name: 'home' });
+        }
+      } else if (hasPressedAltAndVKey(e)) {
+        if (!this.isCurrentRouteSameAsNavigation('contacts_dashboard')) {
+          router.push({ name: 'contacts_dashboard' });
+        }
+      } else if (hasPressedAltAndRKey(e)) {
+        if (!this.isCurrentRouteSameAsNavigation('settings_account_reports')) {
+          router.push({ name: 'settings_account_reports' });
+        }
+      } else if (hasPressedAltAndSKey(e)) {
+        if (!this.isCurrentRouteSameAsNavigation('agent_list')) {
+          router.push({ name: 'agent_list' });
+        }
+      }
+    },
+    isCurrentRouteSameAsNavigation(routeName) {
+      return router.currentRoute && router.currentRoute.name === routeName;
+    },
+    toggleSupportChatWindow() {
+      window.$chatwoot.toggle();
+    },
     filterMenuItemsByRole(menuItems) {
       if (!this.currentRole) {
         return [];
@@ -301,40 +317,24 @@ export default {
           ) > -1
       );
     },
-    logout() {
-      Auth.logout();
-    },
-    showOptions() {
+    toggleOptions() {
       this.showOptionsMenu = !this.showOptionsMenu;
     },
-    changeAccount() {
-      this.showAccountModal = true;
+    toggleAccountModal() {
+      this.showAccountModal = !this.showAccountModal;
     },
-    onClose() {
-      this.showAccountModal = false;
-    },
-    createAccount() {
+    openCreateAccountModal() {
       this.showAccountModal = false;
       this.showCreateAccountModal = true;
     },
-    onCloseCreate() {
+    closeCreateAccountModal() {
       this.showCreateAccountModal = false;
     },
-    async addAccount() {
-      try {
-        const account_id = await this.$store.dispatch('accounts/create', {
-          account_name: this.accountName,
-        });
-        this.onClose();
-        this.showAlert(this.$t('CREATE_ACCOUNT.API.SUCCESS_MESSAGE'));
-        window.location = `/app/accounts/${account_id}/dashboard`;
-      } catch (error) {
-        if (error.response.status === 422) {
-          this.showAlert(this.$t('CREATE_ACCOUNT.API.EXIST_MESSAGE'));
-        } else {
-          this.showAlert(this.$t('CREATE_ACCOUNT.API.ERROR_MESSAGE'));
-        }
-      }
+    showAddLabelPopup() {
+      this.showAddLabelModal = true;
+    },
+    hideAddLabelPopup() {
+      this.showAddLabelModal = false;
     },
   },
 };
@@ -346,24 +346,6 @@ export default {
 .account-selector--modal {
   .modal-container {
     width: 40rem;
-  }
-
-  .page-top-bar {
-    padding-bottom: $space-two;
-  }
-}
-
-.change-accounts--button.button {
-  font-weight: $font-weight-normal;
-  font-size: $font-size-small;
-  padding: $space-small $space-one;
-}
-
-.dropdown-pane {
-  li {
-    a {
-      padding: $space-small $space-one !important;
-    }
   }
 }
 
@@ -406,7 +388,23 @@ export default {
     }
   }
 }
+
 .app-context-menu {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  flex-direction: row;
   height: 6rem;
+}
+
+.current-user--options {
+  font-size: $font-size-big;
+  margin-bottom: auto;
+  margin-left: auto;
+  margin-top: auto;
+}
+
+.teams-sidebar-menu + .nested.vertical.menu {
+  padding-left: calc(var(--space-medium) - var(--space-one));
 }
 </style>

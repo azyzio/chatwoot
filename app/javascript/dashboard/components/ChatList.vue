@@ -1,9 +1,8 @@
 <template>
-  <div class="conversations-sidebar  medium-4 columns">
+  <div class="conversations-list-wrap">
     <slot></slot>
     <div class="chat-list__top">
-      <h1 class="page-title">
-        <woot-sidemenu-icon />
+      <h1 class="page-title text-truncate" :title="pageTitle">
         {{ pageTitle }}
       </h1>
       <chat-filter @statusFilterChange="updateStatusType" />
@@ -20,25 +19,28 @@
       {{ $t('CHAT_LIST.LIST.404') }}
     </p>
 
-    <div class="conversations-list">
+    <div ref="activeConversation" class="conversations-list">
       <conversation-card
         v-for="chat in conversationList"
         :key="chat.id"
         :active-label="label"
+        :team-id="teamId"
         :chat="chat"
+        :show-assignee="showAssigneeInConversationCard"
       />
 
       <div v-if="chatListLoading" class="text-center">
         <span class="spinner"></span>
       </div>
 
-      <div
+      <woot-button
         v-if="!hasCurrentPageEndReached && !chatListLoading"
-        class="clear button load-more-conversations"
+        variant="clear"
+        size="expanded"
         @click="fetchConversations"
       >
         {{ $t('CHAT_LIST.LOAD_MORE_CONVERSATIONS') }}
-      </div>
+      </woot-button>
 
       <p
         v-if="
@@ -61,8 +63,13 @@ import ChatFilter from './widgets/conversation/ChatFilter';
 import ChatTypeTabs from './widgets/ChatTypeTabs';
 import ConversationCard from './widgets/conversation/ConversationCard';
 import timeMixin from '../mixins/time';
+import eventListenerMixins from 'shared/mixins/eventListenerMixins';
 import conversationMixin from '../mixins/conversations';
 import wootConstants from '../constants';
+import {
+  hasPressedAltAndJKey,
+  hasPressedAltAndKKey,
+} from 'shared/helpers/KeyboardHelpers';
 
 export default {
   components: {
@@ -70,9 +77,13 @@ export default {
     ConversationCard,
     ChatFilter,
   },
-  mixins: [timeMixin, conversationMixin],
+  mixins: [timeMixin, conversationMixin, eventListenerMixins],
   props: {
     conversationInbox: {
+      type: [String, Number],
+      default: 0,
+    },
+    teamId: {
       type: [String, Number],
       default: 0,
     },
@@ -89,6 +100,7 @@ export default {
   },
   computed: {
     ...mapGetters({
+      currentChat: 'getSelectedChat',
       chatLists: 'getAllConversations',
       mineChatsList: 'getMineChats',
       allChatList: 'getAllStatusChats',
@@ -108,11 +120,14 @@ export default {
         };
       });
     },
+    showAssigneeInConversationCard() {
+      return this.activeAssigneeTab === wootConstants.ASSIGNEE_TYPE.ALL;
+    },
     inbox() {
       return this.$store.getters['inboxes/getInbox'](this.activeInbox);
     },
     currentPage() {
-      return this.$store.getters['conversationPage/getCurrentPage'](
+      return this.$store.getters['conversationPage/getCurrentPageFilter'](
         this.activeAssigneeTab
       );
     },
@@ -128,11 +143,15 @@ export default {
         status: this.activeStatus,
         page: this.currentPage + 1,
         labels: this.label ? [this.label] : undefined,
+        teamId: this.teamId ? this.teamId : undefined,
       };
     },
     pageTitle() {
       if (this.inbox.name) {
         return this.inbox.name;
+      }
+      if (this.activeTeam.name) {
+        return this.activeTeam.name;
       }
       if (this.label) {
         return `#${this.label}`;
@@ -141,27 +160,28 @@ export default {
     },
     conversationList() {
       let conversationList = [];
+      const filters = this.conversationFilters;
       if (this.activeAssigneeTab === 'me') {
-        conversationList = this.mineChatsList.slice();
+        conversationList = [...this.mineChatsList(filters)];
       } else if (this.activeAssigneeTab === 'unassigned') {
-        conversationList = this.unAssignedChatsList.slice();
+        conversationList = [...this.unAssignedChatsList(filters)];
       } else {
-        conversationList = this.allChatList.slice();
+        conversationList = [...this.allChatList(filters)];
       }
 
-      if (!this.label) {
-        return conversationList;
+      return conversationList;
+    },
+    activeTeam() {
+      if (this.teamId) {
+        return this.$store.getters['teams/getTeam'](this.teamId);
       }
-
-      return conversationList.filter(conversation => {
-        const labels = this.$store.getters[
-          'conversationLabels/getConversationLabels'
-        ](conversation.id);
-        return labels.includes(this.label);
-      });
+      return {};
     },
   },
   watch: {
+    activeTeam() {
+      this.resetAndFetchData();
+    },
     conversationInbox() {
       this.resetAndFetchData();
     },
@@ -178,6 +198,50 @@ export default {
     });
   },
   methods: {
+    getKeyboardListenerParams() {
+      const allConversations = this.$refs.activeConversation.querySelectorAll(
+        'div.conversations-list div.conversation'
+      );
+      const activeConversation = this.$refs.activeConversation.querySelector(
+        'div.conversations-list div.conversation.active'
+      );
+      const activeConversationIndex = [...allConversations].indexOf(
+        activeConversation
+      );
+      const lastConversationIndex = allConversations.length - 1;
+      return {
+        allConversations,
+        activeConversation,
+        activeConversationIndex,
+        lastConversationIndex,
+      };
+    },
+    handleKeyEvents(e) {
+      if (hasPressedAltAndJKey(e)) {
+        const {
+          allConversations,
+          activeConversationIndex,
+        } = this.getKeyboardListenerParams();
+        if (activeConversationIndex === -1) {
+          allConversations[0].click();
+        }
+        if (activeConversationIndex >= 1) {
+          allConversations[activeConversationIndex - 1].click();
+        }
+      }
+      if (hasPressedAltAndKKey(e)) {
+        const {
+          allConversations,
+          activeConversationIndex,
+          lastConversationIndex,
+        } = this.getKeyboardListenerParams();
+        if (activeConversationIndex === -1) {
+          allConversations[lastConversationIndex].click();
+        } else if (activeConversationIndex < lastConversationIndex) {
+          allConversations[activeConversationIndex + 1].click();
+        }
+      }
+    },
     resetAndFetchData() {
       this.$store.dispatch('conversationPage/reset');
       this.$store.dispatch('emptyAllConversations');
@@ -190,6 +254,7 @@ export default {
     },
     updateAssigneeTab(selectedTab) {
       if (this.activeAssigneeTab !== selectedTab) {
+        bus.$emit('clearSearchInput');
         this.activeAssigneeTab = selectedTab;
         if (!this.currentPage) {
           this.fetchConversations();
@@ -207,9 +272,27 @@ export default {
 </script>
 
 <style scoped lang="scss">
-@import '~dashboard/assets/scss/variables';
+@import '~dashboard/assets/scss/woot';
 .spinner {
-  margin-top: $space-normal;
-  margin-bottom: $space-normal;
+  margin-top: var(--space-normal);
+  margin-bottom: var(--space-normal);
+}
+
+.conversations-list-wrap {
+  flex-shrink: 0;
+  width: 34rem;
+
+  @include breakpoint(large up) {
+    width: 36rem;
+  }
+  @include breakpoint(xlarge up) {
+    width: 35rem;
+  }
+  @include breakpoint(xxlarge up) {
+    width: 38rem;
+  }
+  @include breakpoint(xxxlarge up) {
+    flex-basis: 46rem;
+  }
 }
 </style>

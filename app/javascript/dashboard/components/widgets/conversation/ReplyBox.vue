@@ -1,92 +1,99 @@
 <template>
   <div class="reply-box" :class="replyBoxClass">
-    <div class="reply-box__top" :class="{ 'is-private': isPrivate }">
+    <reply-top-panel
+      :mode="replyType"
+      :set-reply-mode="setReplyMode"
+      :is-message-length-reaching-threshold="isMessageLengthReachingThreshold"
+      :characters-remaining="charactersRemaining"
+      :popout-reply-box="popoutReplyBox"
+      @click="$emit('click')"
+    />
+    <div class="reply-box__top">
       <canned-response
-        v-if="showCannedResponsesList"
-        v-on-clickaway="hideCannedResponse"
-        data-dropdown-menu
-        :on-keyenter="replaceText"
-        :on-click="replaceText"
+        v-if="showMentions && hasSlashCommand"
+        v-on-clickaway="hideMentions"
+        :search-key="mentionSearchKey"
+        @click="replaceText"
       />
       <emoji-input
         v-if="showEmojiPicker"
         v-on-clickaway="hideEmojiPicker"
         :on-click="emojiOnClick"
       />
+      <reply-email-head
+        v-if="showReplyHead"
+        @set-emails="setCcEmails"
+        :clear-mails="clearMails"
+      />
       <resizable-text-area
+        v-if="!showRichContentEditor"
         ref="messageInput"
         v-model="message"
         class="input"
         :placeholder="messagePlaceHolder"
         :min-height="4"
+        @typing-off="onTypingOff"
+        @typing-on="onTypingOn"
         @focus="onFocus"
         @blur="onBlur"
       />
-      <file-upload
-        v-if="showFileUpload"
-        :size="4096 * 4096"
-        accept="image/*, application/pdf, audio/mpeg, video/mp4, audio/ogg"
-        @input-file="onFileUpload"
-      >
-        <i v-if="!isUploading" class="icon ion-android-attach attachment" />
-        <woot-spinner v-if="isUploading" />
-      </file-upload>
-      <i
-        class="icon ion-happy-outline"
-        :class="{ active: showEmojiPicker }"
-        @click="toggleEmojiPicker"
+      <woot-message-editor
+        v-else
+        v-model="message"
+        class="input"
+        :is-private="isOnPrivateNote"
+        :placeholder="messagePlaceHolder"
+        :min-height="4"
+        @typing-off="onTypingOff"
+        @typing-on="onTypingOn"
+        @focus="onFocus"
+        @blur="onBlur"
+        @toggle-user-mention="toggleUserMention"
+        @toggle-canned-menu="toggleCannedMenu"
       />
     </div>
-
-    <div class="reply-box__bottom">
-      <ul class="tabs">
-        <li class="tabs-title" :class="{ 'is-active': !isPrivate }">
-          <a href="#" @click="setReplyMode">{{
-            $t('CONVERSATION.REPLYBOX.REPLY')
-          }}</a>
-        </li>
-        <li class="tabs-title is-private" :class="{ 'is-active': isPrivate }">
-          <a href="#" @click="setPrivateReplyMode">
-            {{ $t('CONVERSATION.REPLYBOX.PRIVATE_NOTE') }}
-          </a>
-        </li>
-        <li v-if="message.length" class="tabs-title message-length">
-          <a :class="{ 'message-error': isMessageLengthReachingThreshold }">
-            {{ characterCountIndicator }}
-          </a>
-        </li>
-      </ul>
-      <button
-        type="button"
-        class="button send-button"
-        :disabled="isReplyButtonDisabled"
-        :class="{
-          disabled: isReplyButtonDisabled,
-          warning: isPrivate,
-        }"
-        @click="sendMessage"
-      >
-        {{ replyButtonLabel }}
-        <i
-          class="icon"
-          :class="{
-            'ion-android-send': !isPrivate,
-            'ion-android-lock': isPrivate,
-          }"
-        />
-      </button>
+    <div v-if="hasAttachments" class="attachment-preview-box">
+      <attachment-preview
+        :attachments="attachedFiles"
+        :remove-attachment="removeAttachment"
+      />
     </div>
+    <reply-bottom-panel
+      :mode="replyType"
+      :send-button-text="replyButtonLabel"
+      :on-file-upload="onFileUpload"
+      :show-file-upload="showFileUpload"
+      :toggle-emoji-picker="toggleEmojiPicker"
+      :show-emoji-picker="showEmojiPicker"
+      :on-send="sendMessage"
+      :is-send-disabled="isReplyButtonDisabled"
+      :set-format-mode="setFormatMode"
+      :is-on-private-note="isOnPrivateNote"
+      :is-format-mode="showRichContentEditor"
+      :enable-rich-editor="isRichEditorEnabled"
+      :enter-to-send-enabled="enterToSendEnabled"
+      @toggleEnterToSend="toggleEnterToSend"
+    />
   </div>
 </template>
 
 <script>
 import { mapGetters } from 'vuex';
 import { mixin as clickaway } from 'vue-clickaway';
-import FileUpload from 'vue-upload-component';
+import alertMixin from 'shared/mixins/alertMixin';
 
 import EmojiInput from 'shared/components/emoji/EmojiInput';
 import CannedResponse from './CannedResponse';
 import ResizableTextArea from 'shared/components/ResizableTextArea';
+import AttachmentPreview from 'dashboard/components/widgets/AttachmentsPreview';
+import ReplyTopPanel from 'dashboard/components/widgets/WootWriter/ReplyTopPanel';
+import ReplyEmailHead from './ReplyEmailHead';
+import ReplyBottomPanel from 'dashboard/components/widgets/WootWriter/ReplyBottomPanel';
+import { REPLY_EDITOR_MODES } from 'dashboard/components/widgets/WootWriter/constants';
+import WootMessageEditor from 'dashboard/components/widgets/WootWriter/Editor';
+import { checkFileSizeLimit } from 'shared/helpers/FileHelper';
+import { MAXIMUM_FILE_UPLOAD_SIZE } from 'shared/constants/messages';
+
 import {
   isEscape,
   isEnter,
@@ -94,36 +101,71 @@ import {
 } from 'shared/helpers/KeyboardHelpers';
 import { MESSAGE_MAX_LENGTH } from 'shared/helpers/MessageTypeHelper';
 import inboxMixin from 'shared/mixins/inboxMixin';
+import uiSettingsMixin from 'dashboard/mixins/uiSettings';
 
 export default {
   components: {
     EmojiInput,
     CannedResponse,
-    FileUpload,
     ResizableTextArea,
+    AttachmentPreview,
+    ReplyTopPanel,
+    ReplyEmailHead,
+    ReplyBottomPanel,
+    WootMessageEditor,
   },
-  mixins: [clickaway, inboxMixin],
+  mixins: [clickaway, inboxMixin, uiSettingsMixin, alertMixin],
   props: {
-    inReplyTo: {
-      type: [String, Number],
-      default: '',
+    selectedTweet: {
+      type: [Object, String],
+      default: () => ({}),
+    },
+    isATweet: {
+      type: Boolean,
+      default: false,
+    },
+    popoutReplyBox: {
+      type: Boolean,
+      default: false,
     },
   },
   data() {
     return {
       message: '',
-      isPrivateTabActive: false,
       isFocused: false,
       showEmojiPicker: false,
-      showCannedResponsesList: false,
+      showMentions: false,
+      attachedFiles: [],
       isUploading: false,
+      replyType: REPLY_EDITOR_MODES.REPLY,
+      mentionSearchKey: '',
+      hasUserMention: false,
+      hasSlashCommand: false,
+      clearMails: false,
     };
   },
   computed: {
+    showRichContentEditor() {
+      if (this.isOnPrivateNote) {
+        return true;
+      }
+
+      if (this.isRichEditorEnabled) {
+        const {
+          display_rich_content_editor: displayRichContentEditor,
+        } = this.uiSettings;
+
+        return displayRichContentEditor;
+      }
+      return false;
+    },
     ...mapGetters({ currentChat: 'getSelectedChat' }),
+    enterToSendEnabled() {
+      return !!this.uiSettings.enter_to_send_enabled;
+    },
     isPrivate() {
-      if (this.currentChat.can_reply) {
-        return this.isPrivateTabActive;
+      if (this.currentChat.can_reply || this.isAWhatsappChannel) {
+        return this.isOnPrivateNote;
       }
       return true;
     },
@@ -139,15 +181,20 @@ export default {
         : this.$t('CONVERSATION.FOOTER.MSG_INPUT');
     },
     isMessageLengthReachingThreshold() {
-      return this.message.length > this.maxLength - 40;
+      return this.message.length > this.maxLength - 50;
     },
-    characterCountIndicator() {
-      return `${this.message.length} / ${this.maxLength}`;
+    charactersRemaining() {
+      return this.maxLength - this.message.length;
     },
     isReplyButtonDisabled() {
-      const isMessageEmpty = !this.message.trim().replace(/\n/g, '').length;
+      if (this.isATweet && !this.inReplyTo) {
+        return true;
+      }
+
+      if (this.hasAttachments) return false;
+
       return (
-        isMessageEmpty ||
+        this.isMessageEmpty ||
         this.message.length === 0 ||
         this.message.length > this.maxLength
       );
@@ -161,16 +208,18 @@ export default {
       if (this.isPrivate) {
         return MESSAGE_MAX_LENGTH.GENERAL;
       }
-
       if (this.isAFacebookInbox) {
         return MESSAGE_MAX_LENGTH.FACEBOOK;
+      }
+      if (this.isAWhatsappChannel) {
+        return MESSAGE_MAX_LENGTH.TWILIO_WHATSAPP;
       }
       if (this.isATwilioSMSChannel) {
         return MESSAGE_MAX_LENGTH.TWILIO_SMS;
       }
       if (this.isATwitterInbox) {
         if (this.conversationType === 'tweet') {
-          return MESSAGE_MAX_LENGTH.TWEET;
+          return MESSAGE_MAX_LENGTH.TWEET - this.replyToUserLength - 2;
         }
       }
       return MESSAGE_MAX_LENGTH.GENERAL;
@@ -180,7 +229,10 @@ export default {
         this.isAWebWidgetInbox ||
         this.isAFacebookInbox ||
         this.isATwilioWhatsappChannel ||
-        this.isAPIInbox
+        this.isAPIInbox ||
+        this.isAnEmailChannel ||
+        this.isATwilioSMSChannel ||
+        this.isATelegramChannel
       );
     },
     replyButtonLabel() {
@@ -194,78 +246,126 @@ export default {
     },
     replyBoxClass() {
       return {
-        'is-focused': this.isFocused,
+        'is-private': this.isPrivate,
+        'is-focused': this.isFocused || this.hasAttachments,
       };
+    },
+    hasAttachments() {
+      return this.attachedFiles.length;
+    },
+    isRichEditorEnabled() {
+      return this.isAWebWidgetInbox || this.isAnEmailChannel;
+    },
+    isOnPrivateNote() {
+      return this.replyType === REPLY_EDITOR_MODES.NOTE;
+    },
+    inReplyTo() {
+      const selectedTweet = this.selectedTweet || {};
+      return selectedTweet.id;
+    },
+    replyToUserLength() {
+      const selectedTweet = this.selectedTweet || {};
+      const {
+        sender: {
+          additional_attributes: { screen_name: screenName = '' } = {},
+        } = {},
+      } = selectedTweet;
+      return screenName ? screenName.length : 0;
+    },
+    isMessageEmpty() {
+      if (!this.message) {
+        return true;
+      }
+      return !this.message.trim().replace(/\n/g, '').length;
+    },
+    showReplyHead(){
+      return this.isAnEmailChannel;
     },
   },
   watch: {
     currentChat(conversation) {
-      if (conversation.can_reply) {
-        this.isPrivateTabActive = false;
+      const { can_reply: canReply } = conversation;
+      if (this.isOnPrivateNote) {
+        return;
+      }
+
+      if (canReply || this.isAWhatsappChannel) {
+        this.replyType = REPLY_EDITOR_MODES.REPLY;
       } else {
-        this.isPrivateTabActive = true;
+        this.replyType = REPLY_EDITOR_MODES.NOTE;
       }
     },
     message(updatedMessage) {
-      if (this.isPrivate) {
-        return;
-      }
-      const isSlashCommand = updatedMessage[0] === '/';
+      this.hasSlashCommand =
+        updatedMessage[0] === '/' && !this.showRichContentEditor;
       const hasNextWord = updatedMessage.includes(' ');
-      const isShortCodeActive = isSlashCommand && !hasNextWord;
+      const isShortCodeActive = this.hasSlashCommand && !hasNextWord;
       if (isShortCodeActive) {
-        this.showCannedResponsesList = true;
-        if (updatedMessage.length > 1) {
-          const searchKey = updatedMessage.substr(1, updatedMessage.length);
-          this.$store.dispatch('getCannedResponse', { searchKey });
-        } else {
-          this.$store.dispatch('getCannedResponse');
-        }
+        this.mentionSearchKey = updatedMessage.substr(1, updatedMessage.length);
+        this.showMentions = true;
       } else {
-        this.showCannedResponsesList = false;
+        this.mentionSearchKey = '';
+        this.showMentions = false;
       }
     },
   },
+
   mounted() {
+    // Donot use the keyboard listener mixin here as the events here are supposed to be
+    // working even if input/textarea is focussed.
     document.addEventListener('keydown', this.handleKeyEvents);
   },
   destroyed() {
     document.removeEventListener('keydown', this.handleKeyEvents);
   },
   methods: {
+    toggleUserMention(currentMentionState) {
+      this.hasUserMention = currentMentionState;
+    },
+    toggleCannedMenu(value) {
+      this.showCannedMenu = value;
+    },
     handleKeyEvents(e) {
       if (isEscape(e)) {
         this.hideEmojiPicker();
-        this.hideCannedResponse();
+        this.hideMentions();
       } else if (isEnter(e)) {
-        if (!hasPressedShift(e)) {
+        const hasSendOnEnterEnabled =
+          (this.showRichContentEditor &&
+            this.enterToSendEnabled &&
+            !this.hasUserMention &&
+            !this.showCannedMenu) ||
+          !this.showRichContentEditor;
+        const shouldSendMessage =
+          hasSendOnEnterEnabled && !hasPressedShift(e) && this.isFocused;
+        if (shouldSendMessage) {
           e.preventDefault();
           this.sendMessage();
         }
       }
     },
+    toggleEnterToSend(enterToSendEnabled) {
+      this.updateUISettings({ enter_to_send_enabled: enterToSendEnabled });
+    },
     async sendMessage() {
       if (this.isReplyButtonDisabled) {
         return;
       }
-      const newMessage = this.message;
-      if (!this.showCannedResponsesList) {
+      if (!this.showMentions) {
+        const newMessage = this.message;
+        const messagePayload = this.getMessagePayload(newMessage);
         this.clearMessage();
         try {
-          const messagePayload = {
-            conversationId: this.currentChat.id,
-            message: newMessage,
-            private: this.isPrivate,
-          };
-          if (this.inReplyTo) {
-            messagePayload.contentAttributes = { in_reply_to: this.inReplyTo };
-          }
           await this.$store.dispatch('sendMessage', messagePayload);
           this.$emit('scrollToMessage');
         } catch (error) {
-          // Error
+          const errorMessage =
+            error?.response?.data?.error ||
+            this.$t('CONVERSATION.MESSAGE_ERROR');
+          this.showAlert(errorMessage);
         }
         this.hideEmojiPicker();
+        this.clearMails = false;
       }
     },
     replaceText(message) {
@@ -273,19 +373,22 @@ export default {
         this.message = message;
       }, 100);
     },
-    setPrivateReplyMode() {
-      this.isPrivateTabActive = true;
-      this.$refs.messageInput.focus();
-    },
-    setReplyMode() {
-      this.isPrivateTabActive = false;
-      this.$refs.messageInput.focus();
+    setReplyMode(mode = REPLY_EDITOR_MODES.REPLY) {
+      const { can_reply: canReply } = this.currentChat;
+
+      if (canReply || this.isAWhatsappChannel) this.replyType = mode;
+      if (this.showRichContentEditor) {
+        return;
+      }
+      this.$nextTick(() => this.$refs.messageInput.focus());
     },
     emojiOnClick(emoji) {
       this.message = `${this.message}${emoji} `;
     },
     clearMessage() {
       this.message = '';
+      this.attachedFiles = [];
+      this.clearMails = true;
     },
     toggleEmojiPicker() {
       this.showEmojiPicker = !this.showEmojiPicker;
@@ -295,51 +398,133 @@ export default {
         this.toggleEmojiPicker();
       }
     },
-    hideCannedResponse() {
-      this.showCannedResponsesList = false;
+    hideMentions() {
+      this.showMentions = false;
+    },
+    onTypingOn() {
+      this.toggleTyping('on');
+    },
+    onTypingOff() {
+      this.toggleTyping('off');
     },
     onBlur() {
       this.isFocused = false;
-      this.toggleTyping('off');
     },
     onFocus() {
       this.isFocused = true;
-      this.toggleTyping('on');
     },
     toggleTyping(status) {
-      if (this.isAWebWidgetInbox && !this.isPrivate) {
-        const conversationId = this.currentChat.id;
-        this.$store.dispatch('conversationTypingStatus/toggleTyping', {
-          status,
-          conversationId,
-        });
-      }
+      const conversationId = this.currentChat.id;
+      this.$store.dispatch('conversationTypingStatus/toggleTyping', {
+        status,
+        conversationId,
+      });
     },
     onFileUpload(file) {
       if (!file) {
         return;
       }
-      this.isUploading = true;
-      this.$store
-        .dispatch('sendAttachment', [
-          this.currentChat.id,
-          { file: file.file, isPrivate: this.isPrivate },
-        ])
-        .then(() => {
-          this.isUploading = false;
-          this.$emit('scrollToMessage');
-        })
-        .catch(() => {
-          this.isUploading = false;
-          this.$emit('scrollToMessage');
-        });
+      if (checkFileSizeLimit(file, MAXIMUM_FILE_UPLOAD_SIZE)) {
+        this.attachedFiles = [];
+        const reader = new FileReader();
+        reader.readAsDataURL(file.file);
+        reader.onloadend = () => {
+          this.attachedFiles.push({
+            currentChatId: this.currentChat.id,
+            resource: file,
+            isPrivate: this.isPrivate,
+            thumb: reader.result,
+          });
+        };
+      } else {
+        this.showAlert(
+          this.$t('CONVERSATION.FILE_SIZE_LIMIT', {
+            MAXIMUM_FILE_UPLOAD_SIZE,
+          })
+        );
+      }
     },
+    removeAttachment(itemIndex) {
+      this.attachedFiles = this.attachedFiles.filter(
+        (item, index) => itemIndex !== index
+      );
+    },
+    getMessagePayload(message) {
+      const [attachment] = this.attachedFiles;
+      const messagePayload = {
+        conversationId: this.currentChat.id,
+        message,
+        private: this.isPrivate,
+      };
+
+      if (this.inReplyTo) {
+        messagePayload.contentAttributes = { in_reply_to: this.inReplyTo };
+      }
+
+      if (attachment) {
+        messagePayload.file = attachment.resource.file;
+      }
+
+      if(this.ccEmails) {
+        messagePayload.ccEmails = this.ccEmails;
+      }
+
+      if(this.bccEmails) {
+        messagePayload.bccEmails = this.bccEmails;
+      }
+
+      return messagePayload;
+    },
+    setFormatMode(value) {
+      this.updateUISettings({ display_rich_content_editor: value });
+    },
+    setCcEmails(value) {
+      this.bccEmails = value.bccEmails;
+      this.ccEmails = value.ccEmails
+    }
   },
 };
 </script>
 
-<style lang="scss">
+<style lang="scss" scoped>
 .send-button {
   margin-bottom: 0;
+}
+
+.attachment-preview-box {
+  padding: 0 var(--space-normal);
+  background: transparent;
+}
+
+.reply-box {
+  border-top: 1px solid var(--color-border);
+  background: white;
+
+  &.is-private {
+    background: var(--y-50);
+  }
+}
+.send-button {
+  margin-bottom: 0;
+}
+
+.reply-box__top {
+  padding: 0 var(--space-normal);
+  border-top: 1px solid var(--color-border);
+  margin-top: -1px;
+}
+
+.emoji-dialog {
+  top: unset;
+  bottom: 12px;
+  left: -320px;
+  right: unset;
+
+  &::before {
+    right: -16px;
+    bottom: 10px;
+    transform: rotate(270deg);
+    filter: drop-shadow(0px 4px 4px rgba(0, 0, 0, 0.08));
+  }
 }
 </style>

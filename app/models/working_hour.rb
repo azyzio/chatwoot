@@ -37,20 +37,21 @@ class WorkingHour < ApplicationRecord
   validate :close_after_open, unless: :closed_all_day?
 
   def self.today
-    find_by(day_of_week: Date.current.cwday)
+    find_by(day_of_week: Date.current.wday)
   end
 
   def open_at?(time)
     return false if closed_all_day?
 
-    time.hour >= open_hour &&
-      time.min  >= open_minutes &&
-      time.hour <= close_hour &&
-      time.min  <= close_minutes
+    open_time = Time.zone.now.in_time_zone(inbox.timezone).change({ hour: open_hour, min: open_minutes })
+    close_time = Time.zone.now.in_time_zone(inbox.timezone).change({ hour: close_hour, min: close_minutes })
+
+    time.between?(open_time, close_time)
   end
 
   def open_now?
-    open_at?(Time.zone.now)
+    inbox_time = Time.zone.now.in_time_zone(inbox.timezone)
+    open_at?(inbox_time)
   end
 
   def closed_now?

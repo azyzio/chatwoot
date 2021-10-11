@@ -1,5 +1,6 @@
 :root {
   --white: #fff;
+  --white-transparent: rgba(255, 255, 255, 0.9);
 
   --w-50: #E3F2FF;
   --w-100: #BBDDFF;
@@ -23,7 +24,7 @@
   --g-800: #009000;
   --g-900: #007000;
 
-  --y-50: #FFFEE8;
+  --y-50: #FFFCF4;
   --y-100: #FFFAC5;
   --y-200: #FFF69E;
   --y-300: #FEF176;
@@ -67,7 +68,20 @@
   --r-800: #D11320;
   --r-900: #C30011;
 
+  --v-50: #FFFFFF;
+  --v-100: #F5EBFF;
+  --v-200: #DDB8FF;
+  --v-300: #C585FF;
+  --v-400: #AC52FF;
+  --v-500: #941FFF;
+  --v-600: #7B00EB;
+  --v-700: #6000B8;
+  --v-800: #450085;
+  --v-900: #2B0052;
+
   // Common color aliases
+  --color-woot: var(--w-500);
+
   --color-heading: #1f2d3d;
   --color-body: #3c4858;
 
@@ -77,4 +91,11 @@
 
   --color-background: #f4f6fb;
   --color-background-light: #f9fafc;
+
+  // Social and inboxes brand colors
+  --color-facebook-brand: #3b5998;
+  --color-twitter-brand: #1da1f2;
+  --color-whatsapp-brand: #25d366;
+  --color-sms-twilio: #f42f46;
+  --color-cloud-generic: #18b7b0;
 }

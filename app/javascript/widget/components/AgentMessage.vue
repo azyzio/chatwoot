@@ -14,14 +14,18 @@
       </div>
       <div class="message-wrap">
         <AgentMessageBubble
-          v-if="!hasAttachments && shouldDisplayAgentMessage"
+          v-if="shouldDisplayAgentMessage"
           :content-type="contentType"
           :message-content-attributes="messageContentAttributes"
           :message-id="message.id"
           :message-type="messageType"
           :message="message.content"
         />
-        <div v-if="hasAttachments" class="chat-bubble has-attachment agent">
+        <div
+          v-if="hasAttachments"
+          class="chat-bubble has-attachment agent"
+          :class="wrapClass"
+        >
           <div v-for="attachment in message.attachments" :key="attachment.id">
             <file-bubble
               v-if="attachment.file_type !== 'image'"
@@ -61,6 +65,7 @@ import FileBubble from 'widget/components/FileBubble';
 import Thumbnail from 'dashboard/components/widgets/Thumbnail';
 import { MESSAGE_TYPE } from 'widget/helpers/constants';
 import configMixin from '../mixins/configMixin';
+import messageMixin from '../mixins/messageMixin';
 import { isASubmittedFormMessage } from 'shared/helpers/MessageTypeHelper';
 export default {
   name: 'AgentMessage',
@@ -71,7 +76,7 @@ export default {
     UserMessage,
     FileBubble,
   },
-  mixins: [timeMixin, configMixin],
+  mixins: [timeMixin, configMixin, messageMixin],
   props: {
     message: {
       type: Object,
@@ -87,16 +92,12 @@ export default {
       ) {
         return false;
       }
+      if (!this.message.content) return false;
       return true;
-    },
-    hasAttachments() {
-      return !!(
-        this.message.attachments && this.message.attachments.length > 0
-      );
     },
     readableTime() {
       const { created_at: createdAt = '' } = this.message;
-      return this.messageStamp(createdAt);
+      return this.messageStamp(createdAt, 'LLL d yyyy, h:mm a');
     },
     messageType() {
       const { message_type: type = 1 } = this.message;
@@ -105,10 +106,6 @@ export default {
     contentType() {
       const { content_type: type = '' } = this.message;
       return type;
-    },
-    messageContentAttributes() {
-      const { content_attributes: attribute = {} } = this.message;
-      return attribute;
     },
     agentName() {
       if (this.message.message_type === MESSAGE_TYPE.TEMPLATE) {
@@ -138,7 +135,7 @@ export default {
       return (
         this.messageContentAttributes.submitted_email ||
         (this.messageContentAttributes.submitted_values &&
-          this.contentType !== 'form')
+          !['form', 'input_csat'].includes(this.contentType))
       );
     },
     responseMessage() {
@@ -148,9 +145,8 @@ export default {
 
       if (this.messageContentAttributes.submitted_values) {
         if (this.contentType === 'input_select') {
-          const [
-            selectionOption = {},
-          ] = this.messageContentAttributes.submitted_values;
+          const [selectionOption = {}] =
+            this.messageContentAttributes.submitted_values;
           return { content: selectionOption.title || selectionOption.value };
         }
       }
@@ -166,6 +162,11 @@ export default {
           content: submittedValue.value,
         })
       );
+    },
+    wrapClass() {
+      return {
+        'has-text': this.shouldDisplayAgentMessage,
+      };
     },
   },
 };
@@ -213,6 +214,10 @@ export default {
   .has-attachment {
     padding: 0;
     overflow: hidden;
+
+    &.has-text {
+      margin-top: $space-smaller;
+    }
   }
 
   .agent-message-wrap {

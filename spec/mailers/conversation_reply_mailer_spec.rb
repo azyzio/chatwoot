@@ -15,9 +15,28 @@ RSpec.describe ConversationReplyMailer, type: :mailer do
 
     context 'with summary' do
       let(:conversation) { create(:conversation, account: account, assignee: agent) }
-      let(:message) { create(:message, account: account, conversation: conversation) }
+      let(:message) do
+        create(:message,
+               account: account,
+               conversation: conversation,
+               content_attributes: {
+                 cc_emails: 'agent_cc1@example.com',
+                 bcc_emails: 'agent_bcc1@example.com'
+               })
+      end
+      let(:cc_message) do
+        create(:message,
+               account: account,
+               message_type: :outgoing,
+               conversation: conversation,
+               content_attributes: {
+                 cc_emails: 'agent_cc1@example.com',
+                 bcc_emails: 'agent_bcc1@example.com'
+               })
+      end
       let(:private_message) { create(:message, account: account, content: 'This is a private message', conversation: conversation) }
       let(:mail) { described_class.reply_with_summary(message.conversation, Time.zone.now).deliver_now }
+      let(:cc_mail) { described_class.reply_with_summary(cc_message.conversation, Time.zone.now).deliver_now }
 
       it 'renders the subject' do
         expect(mail.subject).to eq("[##{message.conversation.display_id}] New messages on this conversation")
@@ -37,6 +56,11 @@ RSpec.describe ConversationReplyMailer, type: :mailer do
         conversation.update(contact_last_seen_at: Time.zone.now)
         expect(mail).to eq nil
       end
+
+      it 'will send email to cc and bcc email addresses' do
+        expect(cc_mail.cc.first).to eq(cc_message.content_attributes[:cc_emails])
+        expect(cc_mail.bcc.first).to eq(cc_message.content_attributes[:bcc_emails])
+      end
     end
 
     context 'without assignee' do
@@ -45,7 +69,7 @@ RSpec.describe ConversationReplyMailer, type: :mailer do
       let(:mail) { described_class.reply_with_summary(message.conversation, Time.zone.now).deliver_now }
 
       it 'has correct name' do
-        expect(mail[:from].display_names).to eq(['Notifications'])
+        expect(mail[:from].display_names).to eq(['Notifications from Inbox'])
       end
     end
 
@@ -95,7 +119,7 @@ RSpec.describe ConversationReplyMailer, type: :mailer do
       let(:conversation) { create(:conversation, assignee: agent, inbox: inbox_member.inbox, account: account) }
       let!(:message) { create(:message, conversation: conversation, account: account) }
       let(:mail) { described_class.reply_with_summary(message.conversation, Time.zone.now).deliver_now }
-      let(:domain) { account.domain || ENV.fetch('MAILER_INBOUND_EMAIL_DOMAIN', false) }
+      let(:domain) { account.inbound_email_domain }
 
       it 'renders the receiver email' do
         expect(mail.to).to eq([message&.conversation&.contact&.email])
@@ -148,7 +172,7 @@ RSpec.describe ConversationReplyMailer, type: :mailer do
       end
 
       it 'sets the from email to be the support email' do
-        expect(mail['FROM'].value).to eq("#{agent.available_name} <#{conversation.account.support_email}>")
+        expect(mail['FROM'].value).to eq("#{agent.available_name} from Inbox <#{conversation.account.support_email}>")
         expect(mail.from).to eq([conversation.account.support_email])
       end
 

@@ -1,13 +1,9 @@
 <template>
   <router
     :show-unread-view="showUnreadView"
+    :show-campaign-view="showCampaignView"
     :is-mobile="isMobile"
-    :grouped-messages="groupedMessages"
-    :unread-messages="unreadMessages"
-    :conversation-size="conversationSize"
-    :available-agents="availableAgents"
     :has-fetched="hasFetched"
-    :conversation-attributes="conversationAttributes"
     :unread-message-count="unreadMessageCount"
     :is-left-aligned="isLeftAligned"
     :hide-message-bubble="hideMessageBubble"
@@ -16,14 +12,13 @@
 </template>
 
 <script>
-import Vue from 'vue';
-import { mapGetters, mapActions } from 'vuex';
+import { mapGetters, mapActions, mapMutations } from 'vuex';
 import { setHeader } from 'widget/helpers/axios';
-import { IFrameHelper } from 'widget/helpers/utils';
-
+import { IFrameHelper, RNHelper } from 'widget/helpers/utils';
 import Router from './views/Router';
 import { getLocale } from './helpers/urlParamsHelper';
 import { BUS_EVENTS } from 'shared/constants/busEvents';
+import { isEmptyObject } from 'widget/helpers/utils';
 
 export default {
   name: 'App',
@@ -33,21 +28,21 @@ export default {
   data() {
     return {
       showUnreadView: false,
+      showCampaignView: false,
       isMobile: false,
       hideMessageBubble: false,
       widgetPosition: 'right',
       showPopoutButton: false,
+      isWebWidgetTriggered: false,
     };
   },
   computed: {
     ...mapGetters({
-      groupedMessages: 'conversation/getGroupedConversation',
-      unreadMessages: 'conversation/getUnreadTextMessages',
-      conversationSize: 'conversation/getConversationSize',
-      availableAgents: 'agent/availableAgents',
       hasFetched: 'agent/getHasFetched',
-      conversationAttributes: 'conversationAttributes/getConversationParams',
+      messageCount: 'conversation/getMessageCount',
       unreadMessageCount: 'conversation/getUnreadMessageCount',
+      campaigns: 'campaign/getCampaigns',
+      activeCampaign: 'campaign/getActiveCampaign',
     }),
     isLeftAligned() {
       const isLeft = this.widgetPosition === 'left';
@@ -55,6 +50,24 @@ export default {
     },
     isIFrame() {
       return IFrameHelper.isIFrame();
+    },
+    isRNWebView() {
+      return RNHelper.isRNWebView();
+    },
+  },
+  watch: {
+    activeCampaign() {
+      this.setCampaignView();
+    },
+    showUnreadView(newVal) {
+      if (newVal) {
+        this.setIframeHeight(this.isMobile);
+      }
+    },
+    showCampaignView(newVal) {
+      if (newVal) {
+        this.setIframeHeight(this.isMobile);
+      }
     },
   },
   mounted() {
@@ -70,14 +83,21 @@ export default {
       this.fetchAvailableAgents(websiteToken);
       this.setLocale(getLocale(window.location.search));
     }
-    this.$store.dispatch('conversationAttributes/get');
+    if (this.isRNWebView) {
+      this.registerListeners();
+      this.sendRNWebViewLoadedEvent();
+    }
+    this.$store.dispatch('conversationAttributes/getAttributes');
     this.setWidgetColor(window.chatwootWebChannel);
     this.registerUnreadEvents();
+    this.registerCampaignEvents();
   },
   methods: {
     ...mapActions('appConfig', ['setWidgetColor']),
     ...mapActions('conversation', ['fetchOldConversations', 'setUserLastSeen']),
+    ...mapActions('campaign', ['initCampaigns', 'executeCampaign']),
     ...mapActions('agent', ['fetchAvailableAgents']),
+    ...mapMutations('events', ['toggleOpen']),
     scrollConversationToBottom() {
       const container = this.$el.querySelector('.conversation-wrap');
       container.scrollTop = container.scrollHeight;
@@ -88,10 +108,20 @@ export default {
         label: this.$t('BUBBLE.LABEL'),
       });
     },
+    setIframeHeight(isFixedHeight) {
+      this.$nextTick(() => {
+        const extraHeight = this.getExtraSpaceToscroll();
+        IFrameHelper.sendMessage({
+          event: 'updateIframeHeight',
+          isFixedHeight,
+          extraHeight,
+        });
+      });
+    },
     setLocale(locale) {
       const { enabledLanguages } = window.chatwootWebChannel;
       if (enabledLanguages.some(lang => lang.iso_639_1_code === locale)) {
-        Vue.config.lang = locale;
+        this.$root.$i18n.locale = locale;
       }
     },
     setPosition(position) {
@@ -113,8 +143,32 @@ export default {
         this.setUserLastSeen();
       });
     },
+    registerCampaignEvents() {
+      bus.$on('on-campaign-view-clicked', campaignId => {
+        const { websiteToken } = window.chatwootWebChannel;
+        this.showCampaignView = false;
+        this.showUnreadView = false;
+        this.unsetUnreadView();
+        this.setUserLastSeen();
+        this.executeCampaign({ campaignId, websiteToken });
+      });
+    },
     setPopoutDisplay(showPopoutButton) {
       this.showPopoutButton = showPopoutButton;
+    },
+    setCampaignView() {
+      const { messageCount, activeCampaign } = this;
+      const isCampaignReadyToExecute =
+        !isEmptyObject(activeCampaign) &&
+        !messageCount &&
+        !this.isWebWidgetTriggered;
+      if (this.isIFrame && isCampaignReadyToExecute) {
+        this.showCampaignView = true;
+        IFrameHelper.sendMessage({
+          event: 'setCampaignMode',
+        });
+        this.setIframeHeight(this.isMobile);
+      }
     },
     setUnreadView() {
       const { unreadMessageCount } = this;
@@ -123,17 +177,23 @@ export default {
           event: 'setUnreadMode',
           unreadMessageCount,
         });
+        this.setIframeHeight(this.isMobile);
       }
     },
     unsetUnreadView() {
       if (this.isIFrame) {
         IFrameHelper.sendMessage({ event: 'resetUnreadMode' });
+        this.setIframeHeight();
       }
     },
     createWidgetEvents(message) {
       const { eventName } = message;
       const isWidgetTriggerEvent = eventName === 'webwidget.triggered';
-      if (isWidgetTriggerEvent && this.showUnreadView) {
+      this.isWebWidgetTriggered = true;
+      if (
+        isWidgetTriggerEvent &&
+        (this.showUnreadView || this.showCampaignView)
+      ) {
         return;
       }
       this.setUserLastSeen();
@@ -154,11 +214,14 @@ export default {
           this.setPopoutDisplay(message.showPopoutButton);
           this.fetchAvailableAgents(websiteToken);
           this.setHideMessageBubble(message.hideMessageBubble);
+          this.$store.dispatch('contacts/get');
         } else if (message.event === 'widget-visible') {
           this.scrollConversationToBottom();
-        } else if (message.event === 'set-current-url') {
-          window.referrerURL = message.referrerURL;
-          bus.$emit(BUS_EVENTS.SET_REFERRER_HOST, message.referrerHost);
+        } else if (message.event === 'change-url') {
+          const { referrerURL, referrerHost } = message;
+          this.initCampaigns({ currentURL: referrerURL, websiteToken });
+          window.referrerURL = referrerURL;
+          bus.$emit(BUS_EVENTS.SET_REFERRER_HOST, referrerHost);
         } else if (message.event === 'toggle-close-button') {
           this.isMobile = message.showClose;
         } else if (message.event === 'push-event') {
@@ -183,8 +246,12 @@ export default {
           this.setBubbleLabel();
         } else if (message.event === 'set-unread-view') {
           this.showUnreadView = true;
+          this.showCampaignView = false;
         } else if (message.event === 'unset-unread-view') {
           this.showUnreadView = false;
+          this.showCampaignView = false;
+        } else if (message.event === 'toggle-open') {
+          this.toggleOpen();
         }
       });
     },
@@ -196,6 +263,32 @@ export default {
           channelConfig: window.chatwootWebChannel,
         },
       });
+    },
+    sendRNWebViewLoadedEvent() {
+      RNHelper.sendMessage({
+        event: 'loaded',
+        config: {
+          authToken: window.authToken,
+          channelConfig: window.chatwootWebChannel,
+        },
+      });
+    },
+    getExtraSpaceToscroll: () => {
+      // This function calculates the extra space needed for the view to
+      // accomodate the height of close button + height of
+      // read messages button. So that scrollbar won't appear
+      const unreadMessageWrap = document.querySelector('.unread-messages');
+      const unreadCloseWrap = document.querySelector('.close-unread-wrap');
+      const readViewWrap = document.querySelector('.open-read-view-wrap');
+
+      if (!unreadMessageWrap) return 0;
+
+      // 24px to compensate the paddings
+      let extraHeight = 24 + unreadMessageWrap.scrollHeight;
+      if (unreadCloseWrap) extraHeight += unreadCloseWrap.scrollHeight;
+      if (readViewWrap) extraHeight += readViewWrap.scrollHeight;
+
+      return extraHeight;
     },
   },
 };

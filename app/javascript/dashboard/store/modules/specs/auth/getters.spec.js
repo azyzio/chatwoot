@@ -21,8 +21,20 @@ describe('#getters', () => {
   it('get', () => {
     expect(
       getters.getCurrentUserAvailabilityStatus({
-        currentUser: { id: 1, name: 'Pranav', availability_status: 'busy' },
+        currentAccountId: 1,
+        currentUser: {
+          id: 1,
+          accounts: [{ id: 1, availability_status: 'busy' }],
+        },
       })
     ).toEqual('busy');
+  });
+
+  it('getUISettings', () => {
+    expect(
+      getters.getUISettings({
+        currentUser: { ui_settings: { is_contact_sidebar_open: true } },
+      })
+    ).toEqual({ is_contact_sidebar_open: true });
   });
 });

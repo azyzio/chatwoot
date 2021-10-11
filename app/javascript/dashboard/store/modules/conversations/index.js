@@ -4,6 +4,7 @@ import Vue from 'vue';
 import * as types from '../../mutation-types';
 import getters, { getSelectedChatConversation } from './getters';
 import actions from './actions';
+import { findPendingMessageIndex } from './helpers';
 import wootConstants from '../../../constants';
 
 const state = {
@@ -60,12 +61,22 @@ export const mutations = {
 
   [types.default.ASSIGN_AGENT](_state, assignee) {
     const [chat] = getSelectedChatConversation(_state);
-    chat.meta.assignee = assignee;
+    Vue.set(chat.meta, 'assignee', assignee);
   },
 
-  [types.default.RESOLVE_CONVERSATION](_state, status) {
+  [types.default.ASSIGN_TEAM](_state, team) {
     const [chat] = getSelectedChatConversation(_state);
-    chat.status = status;
+    Vue.set(chat.meta, 'team', team);
+  },
+
+  [types.default.CHANGE_CONVERSATION_STATUS](
+    _state,
+    { conversationId, status, snoozedUntil }
+  ) {
+    const conversation =
+      getters.getConversationById(_state)(conversationId) || {};
+    Vue.set(conversation, 'snoozed_until', snoozedUntil);
+    Vue.set(conversation, 'status', status);
   },
 
   [types.default.MUTE_CONVERSATION](_state) {
@@ -85,17 +96,16 @@ export const mutations = {
       selectedChatId: conversationId,
     });
     if (!chat) return;
-    const previousMessageIndex = chat.messages.findIndex(
-      m => m.id === message.id
-    );
-    if (previousMessageIndex === -1) {
+
+    const pendingMessageIndex = findPendingMessageIndex(chat, message);
+    if (pendingMessageIndex !== -1) {
+      Vue.set(chat.messages, pendingMessageIndex, message);
+    } else {
       chat.messages.push(message);
       chat.timestamp = message.created_at;
       if (selectedChatId === conversationId) {
         window.bus.$emit('scrollToMessage');
       }
-    } else {
-      chat.messages[previousMessageIndex] = message;
     }
   },
 
@@ -145,7 +155,7 @@ export const mutations = {
   // Update assignee on action cable message
   [types.default.UPDATE_ASSIGNEE](_state, payload) {
     const [chat] = _state.allConversations.filter(c => c.id === payload.id);
-    chat.meta.assignee = payload.assignee;
+    Vue.set(chat.meta, 'assignee', payload.assignee);
   },
 
   [types.default.UPDATE_CONVERSATION_CONTACT](
@@ -170,6 +180,13 @@ export const mutations = {
     if (chat) {
       Vue.set(chat, 'can_reply', canReply);
     }
+  },
+
+  [types.default.CLEAR_CONTACT_CONVERSATIONS](_state, contactId) {
+    const chats = _state.allConversations.filter(
+      c => c.meta.sender.id !== contactId
+    );
+    Vue.set(_state, 'allConversations', chats);
   },
 };
 

@@ -3,7 +3,7 @@
     <div class="table-actions-wrap">
       <div class="left-aligned-wrap">
         <h1 class="page-title">
-          {{ $t('CONTACTS_PAGE.HEADER') }}
+          {{ headerTitle ? `#${headerTitle}` : $t('CONTACTS_PAGE.HEADER') }}
         </h1>
       </div>
       <div class="right-aligned-wrap">
@@ -17,13 +17,32 @@
             @keyup.enter="onSearchSubmit"
             @input="onInputSearch"
           />
-          <woot-submit-button
-            :button-text="$t('CONTACTS_PAGE.SEARCH_BUTTON')"
-            :loading="false"
-            :button-class="searchButtonClass"
+          <woot-button
+            :is-loading="false"
+            :class-names="searchButtonClass"
             @click="onSearchSubmit"
-          />
+          >
+            {{ $t('CONTACTS_PAGE.SEARCH_BUTTON') }}
+          </woot-button>
         </div>
+
+        <woot-button
+          color-scheme="success"
+          icon="ion-android-add-circle"
+          class="margin-right-small"
+          data-testid="create-new-contact"
+          @click="onToggleCreate"
+        >
+          {{ $t('CREATE_CONTACT.BUTTON_LABEL') }}
+        </woot-button>
+
+        <woot-button
+          color-scheme="info"
+          icon="ion-android-upload"
+          @click="onToggleImport"
+        >
+          {{ $t('IMPORT_CONTACTS.BUTTON_LABEL') }}
+        </woot-button>
       </div>
     </div>
   </header>
@@ -31,8 +50,11 @@
 
 <script>
 export default {
-  components: {},
   props: {
+    headerTitle: {
+      type: String,
+      default: '',
+    },
     searchQuery: {
       type: String,
       default: '',
@@ -45,6 +67,20 @@ export default {
       type: Function,
       default: () => {},
     },
+    onToggleCreate: {
+      type: Function,
+      default: () => {},
+    },
+    onToggleImport: {
+      type: Function,
+      default: () => {},
+    },
+  },
+  data() {
+    return {
+      showCreateModal: false,
+      showImportModal: false,
+    };
   },
   computed: {
     searchButtonClass() {
@@ -55,11 +91,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-/* TODO-REM; Change variables sizing to rem after html font size change from 1.0 t0 1.6 */
-
-.header {
-  padding: 0 var(--space-medium);
-}
 .page-title {
   margin: 0;
 }
@@ -67,37 +98,49 @@ export default {
   display: flex;
   justify-content: space-between;
   width: 100%;
-  margin-bottom: var(--space-slab);
+  padding: var(--space-small) var(--space-normal) var(--space-small)
+    var(--space-normal);
 }
+
+.left-aligned-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.right-aligned-wrap {
+  display: flex;
+}
+
 .search-wrap {
   width: 400px;
-  height: 3.6rem;
   display: flex;
   align-items: center;
   position: relative;
+  margin-right: var(--space-small);
 
   .search-icon {
     position: absolute;
     top: 1px;
     left: var(--space-one);
-    height: 3.6rem;
+    height: 3.8rem;
     line-height: 3.6rem;
     font-size: var(--font-size-medium);
     color: var(--b-700);
   }
   .contact-search {
     margin: 0;
-    height: 3.6rem;
+    height: 3.8rem;
     width: 100%;
     padding-left: var(--space-large);
     padding-right: 6rem;
+    border-color: var(--s-100);
   }
 
   .button {
     margin-left: var(--space-small);
     height: 3.2rem;
-    top: var(--space-micro);
-    right: var(--space-micro);
+    right: var(--space-smaller);
     position: absolute;
     padding: 0 var(--space-small);
     transition: transform 100ms linear;
