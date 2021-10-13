@@ -11,7 +11,7 @@ class ConversationReplyMailer < ApplicationMailer
     recap_messages = @conversation.messages.chat.where('created_at < ?', message_queued_time).last(10)
     new_messages = @conversation.messages.chat.where('created_at >= ?', message_queued_time)
     @messages = recap_messages + new_messages
-    @messages = @messages.select(&:reportable?)
+    @messages = @messages.select(&:email_reply_summarizable?)
 
     mail({
            to: @contact&.email,
@@ -19,7 +19,9 @@ class ConversationReplyMailer < ApplicationMailer
            reply_to: reply_email,
            subject: mail_subject,
            message_id: custom_message_id,
-           in_reply_to: in_reply_to_email
+           in_reply_to: in_reply_to_email,
+           cc: cc_bcc_emails[0],
+           bcc: cc_bcc_emails[1]
          })
   end
 
@@ -29,7 +31,8 @@ class ConversationReplyMailer < ApplicationMailer
     init_conversation_attributes(conversation)
     return if conversation_already_viewed?
 
-    @messages = @conversation.messages.chat.outgoing.where('created_at >= ?', message_queued_time)
+    @messages = @conversation.messages.chat.where(message_type: [:outgoing, :template]).where('created_at >= ?', message_queued_time)
+    @messages = @messages.reject { |m| m.template? && !m.input_csat? }
     return false if @messages.count.zero?
 
     mail({
@@ -38,7 +41,9 @@ class ConversationReplyMailer < ApplicationMailer
            reply_to: reply_email,
            subject: mail_subject,
            message_id: custom_message_id,
-           in_reply_to: in_reply_to_email
+           in_reply_to: in_reply_to_email,
+           cc: cc_bcc_emails[0],
+           bcc: cc_bcc_emails[1]
          })
   end
 
@@ -47,7 +52,7 @@ class ConversationReplyMailer < ApplicationMailer
 
     init_conversation_attributes(conversation)
 
-    @messages = @conversation.messages.chat.select(&:reportable?)
+    @messages = @conversation.messages.chat.select(&:conversation_transcriptable?)
 
     mail({
            to: to_email,
@@ -139,6 +144,15 @@ class ConversationReplyMailer < ApplicationMailer
     end
 
     nil
+  end
+
+  def cc_bcc_emails
+    content_attributes = @conversation.messages.outgoing.last&.content_attributes
+
+    return [] unless content_attributes
+    return [] unless content_attributes[:cc_emails] || content_attributes[:bcc_emails]
+
+    [content_attributes[:cc_emails], content_attributes[:bcc_emails]]
   end
 
   def inbound_email_enabled?

@@ -1,10 +1,7 @@
 <template>
   <div class="status">
     <div class="status-view">
-      <div
-        :class="`status-badge status-badge__${currentUserAvailabilityStatus}`"
-      />
-
+      <availability-status-badge :status="currentUserAvailabilityStatus" />
       <div class="status-view--title">
         {{ availabilityDisplayLabel }}
       </div>
@@ -23,22 +20,32 @@
               :key="status.value"
               class="status-items"
             >
-              <button
-                class="button clear status-change--dropdown-button"
-                :disabled="status.disabled"
-                @click="changeAvailabilityStatus(status.value)"
+              <woot-button
+                variant="clear"
+                size="small"
+                color-scheme="secondary"
+                class-names="status-change--dropdown-button"
+                :is-disabled="status.disabled"
+                @click="
+                  changeAvailabilityStatus(status.value, currentAccountId)
+                "
               >
-                <span :class="`status-badge status-badge__${status.value}`" />
+                <availability-status-badge :status="status.value" />
                 {{ status.label }}
-              </button>
+              </woot-button>
             </woot-dropdown-item>
           </woot-dropdown-menu>
         </div>
       </transition>
 
-      <button class="status-change--change-button" @click="openStatusMenu">
+      <woot-button
+        variant="clear"
+        color-scheme="secondary"
+        class-names="status-change--change-button link"
+        @click="openStatusMenu"
+      >
         {{ $t('SIDEBAR_ITEMS.CHANGE_AVAILABILITY_STATUS') }}
-      </button>
+      </woot-button>
     </div>
   </div>
 </template>
@@ -48,6 +55,7 @@ import { mapGetters } from 'vuex';
 import { mixin as clickaway } from 'vue-clickaway';
 import WootDropdownItem from 'shared/components/ui/dropdown/DropdownItem.vue';
 import WootDropdownMenu from 'shared/components/ui/dropdown/DropdownMenu.vue';
+import AvailabilityStatusBadge from '../widgets/conversation/AvailabilityStatusBadge';
 
 const AVAILABILITY_STATUS_KEYS = ['online', 'busy', 'offline'];
 
@@ -55,6 +63,7 @@ export default {
   components: {
     WootDropdownMenu,
     WootDropdownItem,
+    AvailabilityStatusBadge,
   },
 
   mixins: [clickaway],
@@ -68,7 +77,8 @@ export default {
 
   computed: {
     ...mapGetters({
-      currentUser: 'getCurrentUser',
+      getCurrentUserAvailabilityStatus: 'getCurrentUserAvailabilityStatus',
+      getCurrentAccountId: 'getCurrentAccountId',
     }),
     availabilityDisplayLabel() {
       const availabilityIndex = AVAILABILITY_STATUS_KEYS.findIndex(
@@ -78,8 +88,11 @@ export default {
         availabilityIndex
       ];
     },
+    currentAccountId() {
+      return this.getCurrentAccountId;
+    },
     currentUserAvailabilityStatus() {
-      return this.currentUser.availability_status;
+      return this.getCurrentUserAvailabilityStatus;
     },
     availabilityStatuses() {
       return this.$t('PROFILE_SETTINGS.FORM.AVAILABILITY.STATUSES_LIST').map(
@@ -101,16 +114,16 @@ export default {
     closeStatusMenu() {
       this.isStatusMenuOpened = false;
     },
-    changeAvailabilityStatus(availability) {
+    changeAvailabilityStatus(availability, accountId) {
       if (this.isUpdating) {
         return;
       }
 
       this.isUpdating = true;
-
       this.$store
         .dispatch('updateAvailability', {
-          availability,
+          availability: availability,
+          account_id: accountId,
         })
         .finally(() => {
           this.isUpdating = false;
@@ -147,44 +160,15 @@ export default {
   }
 }
 
-.status-badge {
-  width: var(--space-one);
-  height: var(--space-one);
-  margin-right: var(--space-micro);
-  display: inline-block;
-  border-radius: 50%;
-
-  &__online {
-    background: var(--g-400);
-  }
-
-  &__offline {
-    background: var(--b-600);
-  }
-
-  &__busy {
-    background: var(--y-700);
-  }
-}
-
 .status-change {
   .dropdown-pane {
     top: -132px;
+    right: var(--space-normal);
   }
 
   .status-items {
     display: flex;
     align-items: baseline;
-  }
-  & &--change-button {
-    color: var(--b-600);
-    font-size: var(--font-size-small);
-    cursor: pointer;
-    outline: none;
-
-    &:hover {
-      color: var(--w-600);
-    }
   }
 }
 </style>

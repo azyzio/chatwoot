@@ -6,6 +6,7 @@ import authAPI from '../../api/auth';
 import createAxios from '../../helper/APIHelper';
 import actionCable from '../../helper/actionCable';
 import { setUser, getHeaderExpiry, clearCookiesOnLogout } from '../utils/api';
+import { DEFAULT_REDIRECT_URL } from '../../constants';
 
 const state = {
   currentUser: {
@@ -39,7 +40,11 @@ export const getters = {
   },
 
   getCurrentUserAvailabilityStatus(_state) {
-    return _state.currentUser.availability_status;
+    const { accounts = [] } = _state.currentUser;
+    const [currentAccount = {}] = accounts.filter(
+      account => account.id === _state.currentAccountId
+    );
+    return currentAccount.availability_status;
   },
 
   getCurrentAccountId(_state) {
@@ -69,7 +74,7 @@ export const actions = {
           commit(types.default.SET_CURRENT_USER);
           window.axios = createAxios(axios);
           actionCable.init(Vue);
-          window.location = '/';
+          window.location = DEFAULT_REDIRECT_URL;
           resolve();
         })
         .catch(error => {
@@ -80,10 +85,12 @@ export const actions = {
   async validityCheck(context) {
     try {
       const response = await authAPI.validityCheck();
-      setUser(response.data.payload.data, getHeaderExpiry(response));
+      setUser(response.data.payload.data, getHeaderExpiry(response), {
+        setUserInSDK: true,
+      });
       context.commit(types.default.SET_CURRENT_USER);
     } catch (error) {
-      if (error.response.status === 401) {
+      if (error?.response?.status === 401) {
         clearCookiesOnLogout();
       }
     }
@@ -101,12 +108,13 @@ export const actions = {
   },
 
   updateProfile: async ({ commit }, params) => {
+    // eslint-disable-next-line no-useless-catch
     try {
       const response = await authAPI.profileUpdate(params);
       setUser(response.data, getHeaderExpiry(response));
       commit(types.default.SET_CURRENT_USER);
     } catch (error) {
-      // Ignore error
+      throw error;
     }
   },
 
@@ -121,14 +129,17 @@ export const actions = {
     }
   },
 
-  updateAvailability: ({ commit, dispatch }, { availability }) => {
-    authAPI.updateAvailability({ availability }).then(response => {
+  updateAvailability: async ({ commit, dispatch }, params) => {
+    try {
+      const response = await authAPI.updateAvailability(params);
       const userData = response.data;
-      const { id, availability_status: availabilityStatus } = userData;
+      const { id } = userData;
       setUser(userData, getHeaderExpiry(response));
       commit(types.default.SET_CURRENT_USER);
-      dispatch('agents/updatePresence', { [id]: availabilityStatus });
-    });
+      dispatch('agents/updatePresence', { [id]: params.availability });
+    } catch (error) {
+      // Ignore error
+    }
   },
 
   setCurrentAccountId({ commit }, accountId) {

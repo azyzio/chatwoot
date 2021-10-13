@@ -19,11 +19,19 @@ class ContactPolicy < ApplicationPolicy
     true
   end
 
+  def contactable_inboxes?
+    true
+  end
+
   def show?
     true
   end
 
   def create?
     true
+  end
+
+  def destroy?
+    @account_user.administrator?
   end
 end

@@ -4,14 +4,14 @@ import { newMessageNotification } from 'shared/helpers/AudioNotificationHelper';
 
 class ActionCableConnector extends BaseActionCableConnector {
   constructor(app, pubsubToken) {
-    super(app, pubsubToken);
+    const { websocketURL = '' } = window.chatwootConfig || {};
+    super(app, pubsubToken, websocketURL);
     this.CancelTyping = [];
     this.events = {
       'message.created': this.onMessageCreated,
       'message.updated': this.onMessageUpdated,
       'conversation.created': this.onConversationCreated,
-      'conversation.opened': this.onStatusChange,
-      'conversation.resolved': this.onStatusChange,
+      'conversation.status_changed': this.onStatusChange,
       'user:logout': this.onLogout,
       'page:reload': this.onReload,
       'assignee.changed': this.onAssigneeChanged,
@@ -19,6 +19,7 @@ class ActionCableConnector extends BaseActionCableConnector {
       'conversation.typing_off': this.onTypingOff,
       'conversation.contact_changed': this.onConversationContactChange,
       'presence.update': this.onPresenceUpdate,
+      'contact.deleted': this.onContactDelete,
     };
   }
 
@@ -114,6 +115,14 @@ class ActionCableConnector extends BaseActionCableConnector {
 
   fetchConversationStats = () => {
     bus.$emit('fetch_conversation_stats');
+  };
+
+  onContactDelete = data => {
+    this.app.$store.dispatch(
+      'contacts/deleteContactThroughConversations',
+      data.id
+    );
+    this.fetchConversationStats();
   };
 }
 

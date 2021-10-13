@@ -6,10 +6,6 @@ RSpec.describe Conversations::EventDataPresenter do
   let(:presenter) { described_class.new(conversation) }
   let(:conversation) { create(:conversation) }
 
-  describe '#lock_data' do
-    it { expect(presenter.lock_data).to eq(id: conversation.display_id, locked: false) }
-  end
-
   describe '#push_data' do
     let(:expected_data) do
       {
@@ -26,6 +22,7 @@ RSpec.describe Conversations::EventDataPresenter do
         can_reply: conversation.can_reply?,
         channel: conversation.inbox.channel_type,
         timestamp: conversation.last_activity_at.to_i,
+        snoozed_until: conversation.snoozed_until,
         contact_last_seen_at: conversation.contact_last_seen_at.to_i,
         agent_last_seen_at: conversation.agent_last_seen_at.to_i,
         unread_count: 0

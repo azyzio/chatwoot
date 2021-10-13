@@ -20,8 +20,6 @@
 #  fk_rails_...  (account_id => accounts.id)
 #
 class Team < ApplicationRecord
-  include RegexHelper
-
   belongs_to :account
   has_many :team_members, dependent: :destroy
   has_many :members, through: :team_members, source: :user
@@ -29,7 +27,6 @@ class Team < ApplicationRecord
 
   validates :name,
             presence: { message: 'must not be blank' },
-            format: { with: UNICODE_CHARACTER_NUMBER_HYPHEN_UNDERSCORE },
             uniqueness: { scope: :account_id }
 
   before_validation do
@@ -42,5 +39,13 @@ class Team < ApplicationRecord
 
   def remove_member(user_id)
     team_members.find_by(user_id: user_id)&.destroy
+  end
+
+  def messages
+    account.messages.where(conversation_id: conversations.pluck(:id))
+  end
+
+  def events
+    account.events.where(conversation_id: conversations.pluck(:id))
   end
 end
